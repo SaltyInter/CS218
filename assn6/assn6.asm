@@ -20,6 +20,8 @@ extern atof, ceil, printBallonsRequired
 	STANDARD_IN 				equ 0
 	SYSTEM_WRITE 				equ 1
 	STANDARD_OUT 				equ 1
+
+; 	Constants
 	LF 							equ 10
 	NULL						equ 0
 
@@ -30,6 +32,11 @@ extern atof, ceil, printBallonsRequired
 	unexpectedArg4Msg			db "ERROR: Unexpected argument 4 value", LF,NULL
 	invalidNumMsg				db "ERROR: Numbers inputed must be greater than 0.0", LF,NULL
 	expectedArgInputMsg			db "Example of expected input is: ./a.out -W <num> -D <num>", LF,NULL
+	
+	;Numerical vars
+	Zero						db 0
+	Weight						dd 0.0
+	Diameter					dd 0.0
 
 section .bss
 
@@ -77,8 +84,8 @@ ret
 ;Fuction that will check and convert the command line args
 ; Arg 1.) rdi - argc 
 ; Arg 2.) rsi - argv
-; Arg 3.) rdx - weight value float
-; Arg 4.) rcx - diameter value float
+; Arg 3.) rdx - weight var address
+; Arg 4.) rcx - diameter var address
 
 ; Returns:	argc is 1 		 return 0
 ;			argc != 5 		 return -1
@@ -90,6 +97,12 @@ global proccessCommandLine
 proccessCommandLine:
 ;	rdi = argc
 ;	rsi = argv
+
+;preservered registers
+push rbx
+push r12
+push r13
+
 mov rcx, 0		;used for chars later
 
 cmp rdi, 1	;only 1 arg was sent
@@ -116,8 +129,43 @@ cmp byte[rcx+1], "D"
 cmp byte[rcx+2], NULL		;check if string has ended
 	jne arg4ERROR			;string did not end
 
-;ANOTHER CHECK ADD LATER
+;Check Floats if they are greater than 0
+;Checking arg 3 the weight
 
+;Place into temp registers as function calls will mess up rsi
+mov r12, qword[rsi + 16]
+mov r13, qword[rsi + 32]
+
+;Move stack by multiple of 16 before c++ function
+mov rax, rsp
+mov rdx, 0
+mov rcx, 16
+div rcx
+sub rsp, rdx
+mov rbx, rdx
+
+mov rdi, r12					;get the value from argv
+call atof						;call c++ function
+add rsp, rbx					;restore stack pointer
+ucomisd xmm0, qword[Zero]		;check if less than 0
+	jbe incorrectNumValueERROR	;jump if <= 0 since its an error
+movss dword[Weight], xmm0
+;Checking arg 4 the diameter of ballon
+
+;Move stack by multiple of 16 before c++ function
+mov rax, rsp
+mov rdx, 0
+mov rcx, 16
+div rcx
+sub rsp, rdx
+mov rbx, rdx
+
+mov rdi, r13					;get the value from argv
+call atof						;call c++ function
+add rsp, rbx					;restore stack pointer
+ucomisd xmm0, qword[Zero]		;check if less than 0
+	jbe incorrectNumValueERROR	;jump if <= 0 since its an error
+movss dword[Diameter], xmm0
 ;Passed all checks so return a success
 mov rax, 1
 jmp endProccessCommandLine
@@ -134,6 +182,10 @@ incorrectNumOfArgs:
 	mov rax, -1
 	jmp endProccessCommandLine
 
+incorrectNumValueERROR:
+	mov rax, -3
+	jmp endProccessCommandLine
+
 arg2ERROR:
 	mov rax, -2
 	jmp endProccessCommandLine
@@ -142,7 +194,14 @@ arg4ERROR:
 	mov rax, -4
 	jmp endProccessCommandLine
 
+
 endProccessCommandLine:		;end the function with error return
+
+;pop preserved registers
+pop r13
+pop r12
+pop rbx
+
 ret
 
 ;Fuction that calculates the numbers of ballons required to lift
@@ -163,6 +222,9 @@ main:
 ;			arg 4 != "-D"	 return -4
 ; if either double value 0.0 or less	return -3
 call proccessCommandLine
+
+
+
 ;compare rax to output correct error
 ;mov correct error message into rdi then jump to an output function
 ;if no errors are found skip this
