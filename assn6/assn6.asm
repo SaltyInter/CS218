@@ -11,7 +11,7 @@
 
 section .data
 ;externs
-extern atof, ceil, printBallonsRequired
+extern atof, ceil, printBalloonsRequired
 
 ;	System Service Constants
 	SYSTEM_EXIT 				equ 60
@@ -34,9 +34,11 @@ extern atof, ceil, printBallonsRequired
 	expectedArgInputMsg			db "Example of expected input is: ./a.out -W <num> -D <num>", LF,NULL
 	
 	;Numerical vars
-	Zero						db 0
-	Weight						dd 0.0
-	Diameter					dd 0.0
+	Zero						dq 0
+	Weight						dq 0.0
+	Diameter					dq 0.0
+	HeliumLift					dq 0.06689
+	PI							dq 3.14159
 
 section .bss
 
@@ -149,7 +151,7 @@ call atof						;call c++ function
 add rsp, rbx					;restore stack pointer
 ucomisd xmm0, qword[Zero]		;check if less than 0
 	jbe incorrectNumValueERROR	;jump if <= 0 since its an error
-movss dword[Weight], xmm0
+movsd qword[Weight], xmm0
 ;Checking arg 4 the diameter of ballon
 
 ;Move stack by multiple of 16 before c++ function
@@ -165,7 +167,7 @@ call atof						;call c++ function
 add rsp, rbx					;restore stack pointer
 ucomisd xmm0, qword[Zero]		;check if less than 0
 	jbe incorrectNumValueERROR	;jump if <= 0 since its an error
-movss dword[Diameter], xmm0
+movsd qword[Diameter], xmm0
 ;Passed all checks so return a success
 mov rax, 1
 jmp endProccessCommandLine
@@ -196,7 +198,6 @@ arg4ERROR:
 
 
 endProccessCommandLine:		;end the function with error return
-
 ;pop preserved registers
 pop r13
 pop r12
@@ -208,6 +209,53 @@ ret
 ;Using STL ceil to round up to whole number
 global ballonCalculations
 ballonCalculations:
+
+;Get weight and diameter into registers
+movsd xmm0, qword[Weight]
+movsd xmm1, qword[Diameter]
+
+;Find ballon volume
+;Use xmm3 for holding volume
+;Use xmm4 as temp register to hold intermediate values
+
+;4/3 into volume
+mov ecx, 4
+cvtsi2sd xmm4, ecx			;temp reg to hold four
+movsd xmm3, xmm4 			;move 4 into volume
+mov ecx, 3
+cvtsi2sd xmm4, ecx			;temp reg to hold three
+divsd xmm3, xmm4			;4/3 into volume
+
+;Volume times PI
+mulsd xmm3, qword[PI]
+
+;Get (diameter/2)^3
+mov ecx, 2
+cvtsi2sd xmm4, ecx			;temp reg to hold 2
+divsd xmm1, xmm4			;divide diameter by 2
+movsd xmm8, xmm1			;temp reg to hold diameter/2
+mulsd xmm1, xmm8			;to the second power
+mulsd xmm1, xmm8			;to the third power
+
+;Ballon volume times (diameter/2)^3
+mulsd xmm3, xmm1
+
+;Ballon volume times helium Lift
+mulsd xmm3, qword[HeliumLift]
+
+;Weight divied by (Ballon volume times helium Lift)
+divsd xmm0, xmm3
+
+;Move stack by multiple of 16 before c++ function
+mov rax, rsp
+mov rdx, 0
+mov rcx, 16
+div rcx
+sub rsp, rdx
+mov rbx, rdx
+
+call ceil						;call c++ function places into rax
+add rsp, rbx					;restore stack pointer
 
 ret
 
@@ -222,8 +270,6 @@ main:
 ;			arg 4 != "-D"	 return -4
 ; if either double value 0.0 or less	return -3
 call proccessCommandLine
-
-
 
 ;compare rax to output correct error
 ;mov correct error message into rdi then jump to an output function
@@ -268,7 +314,28 @@ mov rdi, expectedArgInputMsg
 call printStr
 jmp endProgram		;end the program
 
+;No Errors were found so continue with program
 skipErrorOutput:
+
+;Move stack by multiple of 16 before c++ function
+mov rax, rsp
+mov rdx, 0
+mov rcx, 16
+div rcx
+sub rsp, rdx
+mov rbx, rdx
+
+;Passing values to print function
+;Move total ballons needed
+call ballonCalculations
+movsd xmm2, xmm0
+;Move weight
+movsd xmm0, qword[Weight]
+;Move Diameter
+movsd xmm1, qword[Diameter]
+
+call printBalloonsRequired
+add rsp, rbx					;restore stack pointer
 
 endProgram:
 	mov rax, SYSTEM_EXIT
