@@ -2,8 +2,9 @@
 ; Author: Matthew Shiroma
 ; Name: Matthew Shiroma
 ; Section: 1004
-; Date Last Modified: 
-; This program
+; Date Last Modified: 10-24-21
+; This program	will calculate floating point numbers and use extern to call
+; c++ function
 
 ; yasm -g dwarf2 -f elf64 assn6.asm
 ; g++ -g -no-pie helper.cpp assn6.o
@@ -35,8 +36,8 @@ extern atof, ceil, printBalloonsRequired
 	
 	;Numerical vars
 	Zero						dq 0
-	Weight						dq 0.0
-	Diameter					dq 0.0
+	Weight						dd 0.0
+	Diameter					dd 0.0
 	HeliumLift					dq 0.06689
 	PI							dq 3.14159
 
@@ -148,10 +149,11 @@ mov rbx, rdx
 
 mov rdi, r12					;get the value from argv
 call atof						;call c++ function
+cvtsd2ss xmm0, xmm0
 add rsp, rbx					;restore stack pointer
 ucomisd xmm0, qword[Zero]		;check if less than 0
 	jbe incorrectNumValueERROR	;jump if <= 0 since its an error
-movsd qword[Weight], xmm0
+movss dword[Weight], xmm0
 ;Checking arg 4 the diameter of ballon
 
 ;Move stack by multiple of 16 before c++ function
@@ -164,10 +166,11 @@ mov rbx, rdx
 
 mov rdi, r13					;get the value from argv
 call atof						;call c++ function
+cvtsd2ss xmm0, xmm0
 add rsp, rbx					;restore stack pointer
 ucomisd xmm0, qword[Zero]		;check if less than 0
 	jbe incorrectNumValueERROR	;jump if <= 0 since its an error
-movsd qword[Diameter], xmm0
+movss dword[Diameter], xmm0
 ;Passed all checks so return a success
 mov rax, 1
 jmp endProccessCommandLine
@@ -211,8 +214,10 @@ global ballonCalculations
 ballonCalculations:
 
 ;Get weight and diameter into registers
-movsd xmm0, qword[Weight]
-movsd xmm1, qword[Diameter]
+movss xmm0, dword[Weight]
+movss xmm1, dword[Diameter]
+cvtss2sd xmm0, xmm0		;increase size for calculations
+cvtss2sd xmm1, xmm1	
 
 ;Find ballon volume
 ;Use xmm3 for holding volume
@@ -330,9 +335,11 @@ mov rbx, rdx
 call ballonCalculations
 movsd xmm2, xmm0
 ;Move weight
-movsd xmm0, qword[Weight]
+movss xmm0, dword[Weight]
+cvtss2sd xmm0, xmm0
 ;Move Diameter
-movsd xmm1, qword[Diameter]
+movss xmm1, dword[Diameter]
+cvtss2sd xmm1, xmm1
 
 call printBalloonsRequired
 add rsp, rbx					;restore stack pointer
