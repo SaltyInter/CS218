@@ -51,10 +51,11 @@ section .data
 	charactersBuffered			dq 0
 	eofReached					dq 0
 	echoUsed					dq 0	;1 if used 0 if not
-	testVar						dq 0
 
-	testArg1					dd 0
-	testArg2					dd 0
+	;vars used by main primarly
+	wordCount					dd 0
+	charAvg						dd 0
+	charVar						dq 0
 
 section .bss
 	buffer				resb BUFFER_SIZE
@@ -263,6 +264,9 @@ getWordCountAndAverage:
 	mov r13, rsi
 	mov r14, 0
 
+	;start off word count at one
+	mov dword[r12], 1
+
 	;output "File Text: if echo was used"
 	cmp qword[echoUsed], 1
 	jne getWordLoop
@@ -271,7 +275,7 @@ getWordCountAndAverage:
 
 getWordLoop:
 	;call getChar for use of calculations
-	mov rdi, testVar
+	mov rdi, charVar
 	call getCharacter
 	mov r8, rax		;temp reg to hold the return value of getChar
 
@@ -281,7 +285,7 @@ getWordLoop:
 	;echo was used so keep going
 	;Print out message
 	mov rax, SYSTEM_WRITE
-	mov rsi, testVar
+	mov rsi, charVar
 	mov rdi, STANDARD_OUT
 	mov rdx, 1			
 	syscall
@@ -307,35 +311,55 @@ getWordLoop:
 	;process the value to figure out how to inc it
 	skipReturnValueCheck:
 	;check if the char is a letter
-	cmp byte[testVar], 'A'
+	cmp byte[charVar], 'A'
 		jb notLetter
-	cmp byte[testVar], 'z'
+	cmp byte[charVar], 'Z'
+		ja notUpperCase
+	jmp isLetter
+
+	;might be lower case letter
+	notUpperCase:
+	cmp byte[charVar], 'a'
+		jb notLetter
+	cmp byte[charVar], 'z'
 		ja notLetter
-	cmp byte[testVar], "[" 	;check the values between upper and lower case letters
-		jb isLowerCase		;is a lowerCase letter so skip
-		cmp byte[testVar], '`'
-		jb notLetter		;is between lower and uppercase letter so its not a word
-	isLowerCase:
-	mov r14, 1		;last char is a letter
-	;went through all checks the char is a letter
-	inc qword[r13]
+	;passed all checks so its lower case
+
+	;is a letter so inc char count
+	isLetter:
+	inc dword[r13]
+	mov r14, 1
 	jmp getWordLoop
 
-	;reached the end of a word
 	notLetter:
-	cmp r14, 1
-		jne lastCharNotLetter
+	cmp byte[charVar], ' '
+		je	isWhiteSpace
+	cmp byte[charVar], LF
+		je	isWhiteSpace
+	cmp byte[charVar], 9	;tab
+		je	isWhiteSpace
+	cmp byte[charVar], 13	;carriage return
+		je	isWhiteSpace
 
-	inc qword[r12]		;only inc if last char check was a letter
-	mov r14, 0			;set to zero to signal that last char is not a letter
+	;last char is not a whitespace
+	mov r14, 1
+	jmp getWordLoop
 
-	lastCharNotLetter:
+	;set bool to show char is a white space
+	isWhiteSpace:
+	cmp r14, 1				;check if last char was a valid char for word
+		jne getWordLoop		;1 is valid and it was not 1
+		inc dword[r12]		;inc the word count
+		mov r14, 0			;reset bool
+
 	jmp getWordLoop
 
 	;do calculations and place into args and return
 	reachedEOF:
+	mov edx, 0
 	mov eax, dword[r13]
 	div dword[r12]	;number by number of words
+	mov dword[r13], 0
 	mov word[r13], ax
 
 	endGetWordCountFunc:
@@ -466,8 +490,8 @@ call printStr
 ;No Errors were found so continue with program
 skipErrorOutput:
 
-mov rdi, testArg1
-mov rsi, testArg2
+mov rdi, wordCount
+mov rsi, charAvg
 call getWordCountAndAverage
 
 ;output the count to console
@@ -476,7 +500,7 @@ mov rdi, wordCountMsg
 call printStr
 
 ;print out the number
-int32ToString dword[testArg1], stringOutput1
+int32ToString dword[wordCount], stringOutput1
 mov rdi, stringOutput1
 call printStr
 
@@ -485,11 +509,11 @@ mov rdi, avgWordLengthMsg
 call printStr
 
 ;print out the number
-int32ToString dword[testArg2], stringOutput2
+int32ToString dword[charAvg], stringOutput2
 mov rdi, stringOutput2
 call printStr
 
-;mov rdi, testArg2
+;mov rdi, charAvg
 ;add rdi, '0'
 ;call printStr
 endProgram:
